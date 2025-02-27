@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "GDB Remote Debugging",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/target/thumbv7em-none-eabihf/debug/embassy-renode-test",
+      "miDebuggerServerAddress": "localhost:3333",
+      "miDebuggerPath": "/usr/bin/arm-none-eabi-gdb",
+      "preLaunchTask": "Run Renode",
+      "postDebugTask": "Close Renode",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "GDB Remote Debugging (real)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/target/thumbv7em-none-eabihf/release/embassy-renode-test",
+      "miDebuggerServerAddress": "localhost:1337",
+      "miDebuggerPath": "/usr/bin/arm-none-eabi-gdb",
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}

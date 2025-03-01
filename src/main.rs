@@ -3,17 +3,16 @@
 #![feature(impl_trait_in_assoc_type)]
 
 use embassy_executor::Spawner;
-use embassy_nrf::config::{HfclkSource, LfclkSource};
-use embassy_nrf::gpio::Output;
+use embassy_nrf::config::HfclkSource;
 use embassy_nrf::peripherals::USBD;
 use embassy_nrf::usb::vbus_detect::SoftwareVbusDetect;
 use embassy_nrf::{bind_interrupts, config::Config, peripherals::RADIO};
-use embassy_nrf_esb::{prx::PrxRadio, RadioConfig};
+use embassy_nrf_esb::RadioConfig;
 use once_cell::sync::OnceCell;
 use rktk::hooks::interface::dongle::DongleHooks;
 use rktk_drivers_common::display::ssd1306::Ssd1306DisplayBuilder;
 use rktk_drivers_common::usb::{CommonUsbDriverBuilder, UsbDriverConfig, UsbOpts};
-use rktk_drivers_nrf::dongle::dongle::EsbDongleDrier;
+use rktk_drivers_nrf::dongle::dongle::{EsbDongleDriver, EsbDongleDriverBuilder};
 use {defmt_rtt as _, panic_probe as _};
 
 bind_interrupts!(pub struct Irqs {
@@ -24,12 +23,22 @@ bind_interrupts!(pub struct Irqs {
 
 static SOFTWARE_VBUS: OnceCell<SoftwareVbusDetect> = OnceCell::new();
 
+use embedded_alloc::LlffHeap as Heap;
+
+#[global_allocator]
+static HEAP: Heap = Heap::empty();
+
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
     let mut config = Config::default();
     config.hfclk_source = HfclkSource::ExternalXtal;
     // config.lfclk_source = LfclkSource::ExternalXtal;
     let p = embassy_nrf::init(config);
+
+    use core::mem::MaybeUninit;
+    const HEAP_SIZE: usize = 16384;
+    static mut HEAP_MEM: [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
+    unsafe { HEAP.init(&raw mut HEAP_MEM as usize, HEAP_SIZE) }
 
     // let mut led = Output::new(
     //     p.P1_03,
@@ -39,8 +48,12 @@ async fn main(_spawner: Spawner) {
 
     defmt::info!("start");
     rktk::print!("start");
-    let prx = PrxRadio::<'_, _, 64>::new(p.RADIO, Irqs, RadioConfig::default()).unwrap();
-    let d = EsbDongleDrier::new(prx);
+    let (prx_task, prx_interface) =
+        embassy_nrf_esb::prx::new_prx(p.RADIO, Irqs, RadioConfig::default());
+    let d = EsbDongleDriverBuilder {
+        prx_task,
+        prx_interface,
+    };
 
     let vbus = SOFTWARE_VBUS.get_or_init(|| SoftwareVbusDetect::new(true, true));
     let driver = embassy_nrf::usb::Driver::new(p.USBD, Irqs, vbus);
@@ -83,7 +96,6 @@ impl DongleHooks for Hooks {
         &mut self,
         data: &mut rktk::drivers::interface::dongle::DongleData,
     ) -> bool {
-        defmt::info!("{:?}", data);
         true
     }
 }

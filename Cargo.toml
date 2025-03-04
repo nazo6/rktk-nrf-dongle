@@ -53,10 +53,6 @@ embassy-nrf = { version = "0.3", features = [
   "unstable-pac",
   "time",
 ] }
-embassy-nrf-esb = { version = "0.1.0", path = "../../../lib/embassy-nrf-esb", features = [
-  "fast-ru",
-  "defmt",
-] }
 nrf-pac = { version = "0.1.0", features = ["defmt"] }
 once_cell = { version = "1.19.0", default-features = false, features = [
   "atomic-polyfill",

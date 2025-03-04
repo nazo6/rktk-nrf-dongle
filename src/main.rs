@@ -6,17 +6,19 @@ use embassy_executor::Spawner;
 use embassy_nrf::config::HfclkSource;
 use embassy_nrf::peripherals::USBD;
 use embassy_nrf::usb::vbus_detect::SoftwareVbusDetect;
-use embassy_nrf::{bind_interrupts, config::Config, peripherals::RADIO};
-use embassy_nrf_esb::RadioConfig;
+use embassy_nrf::{bind_interrupts, config::Config};
 use once_cell::sync::OnceCell;
 use rktk::hooks::interface::dongle::DongleHooks;
 use rktk_drivers_common::display::ssd1306::Ssd1306DisplayBuilder;
 use rktk_drivers_common::usb::{CommonUsbDriverBuilder, UsbDriverConfig, UsbOpts};
-use rktk_drivers_nrf::dongle::dongle::{EsbDongleDriver, EsbDongleDriverBuilder};
+use rktk_drivers_nrf::dongle::dongle::{
+    EsbDongleDriverBuilder, EsbInterruptHandler, TimerInterruptHandler,
+};
 use {defmt_rtt as _, panic_probe as _};
 
 bind_interrupts!(pub struct Irqs {
-    RADIO => embassy_nrf_esb::InterruptHandler<RADIO>;
+    RADIO => EsbInterruptHandler;
+    TIMER0 => TimerInterruptHandler;
     USBD => embassy_nrf::usb::InterruptHandler<USBD>;
     TWISPI0 => embassy_nrf::twim::InterruptHandler<embassy_nrf::peripherals::TWISPI0>;
 });
@@ -48,11 +50,9 @@ async fn main(_spawner: Spawner) {
 
     defmt::info!("start");
     rktk::print!("start");
-    let (prx_task, prx_interface) =
-        embassy_nrf_esb::prx::new_prx(p.RADIO, Irqs, RadioConfig::default());
     let d = EsbDongleDriverBuilder {
-        prx_task,
-        prx_interface,
+        timer: p.TIMER0,
+        radio: p.RADIO,
     };
 
     let vbus = SOFTWARE_VBUS.get_or_init(|| SoftwareVbusDetect::new(true, true));

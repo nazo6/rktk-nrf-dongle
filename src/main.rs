@@ -3,16 +3,22 @@
 #![feature(impl_trait_in_assoc_type)]
 
 use embassy_executor::Spawner;
-use embassy_nrf::config::HfclkSource;
-use embassy_nrf::peripherals::USBD;
-use embassy_nrf::usb::vbus_detect::SoftwareVbusDetect;
-use embassy_nrf::{bind_interrupts, config::Config};
+use embassy_nrf::{
+    bind_interrupts,
+    config::{Config, HfclkSource},
+    peripherals::USBD,
+    usb::vbus_detect::SoftwareVbusDetect,
+};
 use once_cell::sync::OnceCell;
-use rktk::hooks::interface::dongle::DongleHooks;
-use rktk_drivers_common::display::ssd1306::Ssd1306DisplayBuilder;
-use rktk_drivers_common::usb::{CommonUsbDriverBuilder, UsbDriverConfig, UsbOpts};
-use rktk_drivers_nrf::dongle::dongle::{
-    EsbDongleDriverBuilder, EsbInterruptHandler, TimerInterruptHandler,
+use rktk::hooks::interface::dongle::default_dongle_hooks;
+use rktk_drivers_common::{
+    display::ssd1306::Ssd1306DisplayBuilder,
+    usb::{CommonUsbDriverBuilder, UsbDriverConfig, UsbOpts},
+};
+use rktk_drivers_nrf::esb::{
+    create_address,
+    dongle::{EsbDongleDriverBuilder, EsbInterruptHandler, TimerInterruptHandler},
+    Config as EsbConfig,
 };
 use {defmt_rtt as _, panic_probe as _};
 
@@ -50,10 +56,15 @@ async fn main(_spawner: Spawner) {
 
     defmt::info!("start");
     rktk::print!("start");
-    let d = EsbDongleDriverBuilder {
-        timer: p.TIMER0,
-        radio: p.RADIO,
-    };
+    let d = EsbDongleDriverBuilder::new(
+        p.TIMER0,
+        p.RADIO,
+        Irqs,
+        EsbConfig {
+            addresses: create_address(90).unwrap(),
+            ..Default::default()
+        },
+    );
 
     let vbus = SOFTWARE_VBUS.get_or_init(|| SoftwareVbusDetect::new(true, true));
     let driver = embassy_nrf::usb::Driver::new(p.USBD, Irqs, vbus);
@@ -87,15 +98,5 @@ async fn main(_spawner: Spawner) {
         ssd1306::size::DisplaySize128x32,
     );
 
-    rktk::task::dongle_start(usb, d, Hooks, Some(display)).await;
-}
-
-struct Hooks;
-impl DongleHooks for Hooks {
-    async fn on_dongle_data(
-        &mut self,
-        data: &mut rktk::drivers::interface::dongle::DongleData,
-    ) -> bool {
-        true
-    }
+    rktk::task::dongle_start(usb, d, default_dongle_hooks(), Some(display)).await;
 }
